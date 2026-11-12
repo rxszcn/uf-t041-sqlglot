@@ -429,6 +429,22 @@ def explode_projection_to_unnest(
                 names.add(name)
                 return name
 
+            # The joins generated for the explode are inserted right after the FROM clause instead
+            # of being appended at the end of the query. This keeps their position relative to the
+            # query's existing joins, so column references stay resolvable and an OUTER explode is
+            # not pushed past an outer join (which would silently drop its outer semantics).
+            # `insert_index` tracks where the next generated join goes; it advances as joins are
+            # added so multiple explode projections keep both their relative order and, for each,
+            # the order of its own generated joins.
+            joins: list[exp.Join] = expression.args.get("joins") or []
+            insert_index = 0
+
+            def insert_join(join: exp.Join) -> None:
+                nonlocal insert_index
+                joins.insert(insert_index, join)
+                insert_index += 1
+                expression.set("joins", joins)
+
             arrays: list[exp.Condition] = []
             series_alias = new_name(taken_select_names, "pos")
             series = exp.alias_(
@@ -478,7 +494,7 @@ def explode_projection_to_unnest(
                             table=[map_key_alias, map_value_alias],
                         )
                         if expression.args.get("from_"):
-                            expression.join(unnest, copy=False, join_type="CROSS")
+                            insert_join(exp.Join(this=unnest, kind=exp.to_identifier("CROSS")))
                         else:
                             expression.from_(unnest, copy=False)
 
@@ -533,10 +549,20 @@ def explode_projection_to_unnest(
                     alias.set("alias", exp.to_identifier(explode_alias))
 
                     series_table_alias = series.args["alias"].this
+                    ordinality = exp.column(pos_alias, table=unnest_source_alias)
+
+                    # Spark's POSEXPLODE position is 0-based, while the target dialect's ordinality
+                    # column is `index_offset`-based (e.g. 1-based WITH ORDINALITY). Compensate the
+                    # offset only for the projected position so the emitted value matches the source;
+                    # the raw ordinality is still used for the join/filter bookkeeping below.
+                    projected_pos = (
+                        ordinality - index_offset
+                        if (is_posexplode and index_offset)
+                        else ordinality
+                    )
+
                     column = exp.If(
-                        this=exp.column(series_alias, table=series_table_alias).eq(
-                            exp.column(pos_alias, table=unnest_source_alias)
-                        ),
+                        this=exp.column(series_alias, table=series_table_alias).eq(ordinality),
                         true=exp.column(explode_alias, table=unnest_source_alias),
                     )
 
@@ -548,16 +574,16 @@ def explode_projection_to_unnest(
                             expressions.index(alias) + 1,
                             exp.If(
                                 this=exp.column(series_alias, table=series_table_alias).eq(
-                                    exp.column(pos_alias, table=unnest_source_alias)
+                                    ordinality
                                 ),
-                                true=exp.column(pos_alias, table=unnest_source_alias),
+                                true=projected_pos,
                             ).as_(pos_alias),
                         )
                         expression.set("expressions", expressions)
 
                     if not arrays:
                         if expression.args.get("from_"):
-                            expression.join(series, copy=False, join_type="CROSS")
+                            insert_join(exp.Join(this=series, kind=exp.to_identifier("CROSS")))
                         else:
                             expression.from_(series, copy=False)
 
@@ -566,17 +592,20 @@ def explode_projection_to_unnest(
 
                     # trino doesn't support left join unnest with on conditions
                     # if it did, this would be much simpler
-                    expression.join(
-                        exp.alias_(
-                            exp.Unnest(
-                                expressions=[explode_arg.copy()],
-                                offset=exp.to_identifier(pos_alias),
+                    # The OUTER semantics of EXPLODE_OUTER are preserved by the series fallback row
+                    # in the WHERE clause, so the unnest itself stays a CROSS JOIN.
+                    insert_join(
+                        exp.Join(
+                            this=exp.alias_(
+                                exp.Unnest(
+                                    expressions=[explode_arg.copy()],
+                                    offset=exp.to_identifier(pos_alias),
+                                ),
+                                unnest_source_alias,
+                                table=[explode_alias],
                             ),
-                            unnest_source_alias,
-                            table=[explode_alias],
-                        ),
-                        join_type="CROSS",
-                        copy=False,
+                            kind=exp.to_identifier("CROSS"),
+                        )
                     )
 
                     if index_offset != 1:
@@ -584,10 +613,10 @@ def explode_projection_to_unnest(
 
                     expression.where(
                         exp.column(series_alias, table=series_table_alias)
-                        .eq(exp.column(pos_alias, table=unnest_source_alias))
+                        .eq(ordinality)
                         .or_(
                             (exp.column(series_alias, table=series_table_alias) > size).and_(
-                                exp.column(pos_alias, table=unnest_source_alias).eq(size)
+                                ordinality.eq(size)
                             )
                         ),
                         copy=False,

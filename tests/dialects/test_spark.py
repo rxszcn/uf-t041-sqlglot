@@ -1465,7 +1465,7 @@ TBLPROPERTIES (
             "SELECT POSEXPLODE(ARRAY(2, 3)) AS x",
             write={
                 "bigquery": "SELECT IF(pos = pos_2, x, NULL) AS x, IF(pos = pos_2, pos_2, NULL) AS pos_2 FROM UNNEST(GENERATE_ARRAY(0, GREATEST(ARRAY_LENGTH([2, 3])) - 1)) AS pos CROSS JOIN UNNEST([2, 3]) AS x WITH OFFSET AS pos_2 WHERE pos = pos_2 OR (pos > (ARRAY_LENGTH([2, 3]) - 1) AND pos_2 = (ARRAY_LENGTH([2, 3]) - 1))",
-                "presto": "SELECT IF(_u.pos = _u_2.pos_2, _u_2.x) AS x, IF(_u.pos = _u_2.pos_2, _u_2.pos_2) AS pos_2 FROM UNNEST(SEQUENCE(1, GREATEST(CARDINALITY(ARRAY[2, 3])))) AS _u(pos) CROSS JOIN UNNEST(ARRAY[2, 3]) WITH ORDINALITY AS _u_2(x, pos_2) WHERE _u.pos = _u_2.pos_2 OR (_u.pos > CARDINALITY(ARRAY[2, 3]) AND _u_2.pos_2 = CARDINALITY(ARRAY[2, 3]))",
+                "presto": "SELECT IF(_u.pos = _u_2.pos_2, _u_2.x) AS x, IF(_u.pos = _u_2.pos_2, _u_2.pos_2 - 1) AS pos_2 FROM UNNEST(SEQUENCE(1, GREATEST(CARDINALITY(ARRAY[2, 3])))) AS _u(pos) CROSS JOIN UNNEST(ARRAY[2, 3]) WITH ORDINALITY AS _u_2(x, pos_2) WHERE _u.pos = _u_2.pos_2 OR (_u.pos > CARDINALITY(ARRAY[2, 3]) AND _u_2.pos_2 = CARDINALITY(ARRAY[2, 3]))",
             },
         )
         self.validate_all(
@@ -1478,7 +1478,7 @@ TBLPROPERTIES (
         self.validate_all(
             "SELECT POSEXPLODE(x) AS (a, b)",
             write={
-                "presto": "SELECT IF(_u.pos = _u_2.a, _u_2.b) AS b, IF(_u.pos = _u_2.a, _u_2.a) AS a FROM UNNEST(SEQUENCE(1, GREATEST(CARDINALITY(x)))) AS _u(pos) CROSS JOIN UNNEST(x) WITH ORDINALITY AS _u_2(b, a) WHERE _u.pos = _u_2.a OR (_u.pos > CARDINALITY(x) AND _u_2.a = CARDINALITY(x))",
+                "presto": "SELECT IF(_u.pos = _u_2.a, _u_2.b) AS b, IF(_u.pos = _u_2.a, _u_2.a - 1) AS a FROM UNNEST(SEQUENCE(1, GREATEST(CARDINALITY(x)))) AS _u(pos) CROSS JOIN UNNEST(x) WITH ORDINALITY AS _u_2(b, a) WHERE _u.pos = _u_2.a OR (_u.pos > CARDINALITY(x) AND _u_2.a = CARDINALITY(x))",
                 "duckdb": "SELECT GENERATE_SUBSCRIPTS(x, 1) - 1 AS a, UNNEST(x) AS b",
                 "spark": "SELECT POSEXPLODE(x) AS (a, b)",
             },
@@ -1501,13 +1501,13 @@ TBLPROPERTIES (
             "SELECT POSEXPLODE(ARRAY(2, 3)), EXPLODE(ARRAY(4, 5, 6)) FROM tbl",
             write={
                 "bigquery": "SELECT IF(pos = pos_2, col, NULL) AS col, IF(pos = pos_2, pos_2, NULL) AS pos_2, IF(pos = pos_3, col_2, NULL) AS col_2 FROM tbl CROSS JOIN UNNEST(GENERATE_ARRAY(0, GREATEST(ARRAY_LENGTH([2, 3]), ARRAY_LENGTH([4, 5, 6])) - 1)) AS pos CROSS JOIN UNNEST([2, 3]) AS col WITH OFFSET AS pos_2 CROSS JOIN UNNEST([4, 5, 6]) AS col_2 WITH OFFSET AS pos_3 WHERE (pos = pos_2 OR (pos > (ARRAY_LENGTH([2, 3]) - 1) AND pos_2 = (ARRAY_LENGTH([2, 3]) - 1))) AND (pos = pos_3 OR (pos > (ARRAY_LENGTH([4, 5, 6]) - 1) AND pos_3 = (ARRAY_LENGTH([4, 5, 6]) - 1)))",
-                "presto": "SELECT IF(_u.pos = _u_2.pos_2, _u_2.col) AS col, IF(_u.pos = _u_2.pos_2, _u_2.pos_2) AS pos_2, IF(_u.pos = _u_3.pos_3, _u_3.col_2) AS col_2 FROM tbl CROSS JOIN UNNEST(SEQUENCE(1, GREATEST(CARDINALITY(ARRAY[2, 3]), CARDINALITY(ARRAY[4, 5, 6])))) AS _u(pos) CROSS JOIN UNNEST(ARRAY[2, 3]) WITH ORDINALITY AS _u_2(col, pos_2) CROSS JOIN UNNEST(ARRAY[4, 5, 6]) WITH ORDINALITY AS _u_3(col_2, pos_3) WHERE (_u.pos = _u_2.pos_2 OR (_u.pos > CARDINALITY(ARRAY[2, 3]) AND _u_2.pos_2 = CARDINALITY(ARRAY[2, 3]))) AND (_u.pos = _u_3.pos_3 OR (_u.pos > CARDINALITY(ARRAY[4, 5, 6]) AND _u_3.pos_3 = CARDINALITY(ARRAY[4, 5, 6])))",
+                "presto": "SELECT IF(_u.pos = _u_2.pos_2, _u_2.col) AS col, IF(_u.pos = _u_2.pos_2, _u_2.pos_2 - 1) AS pos_2, IF(_u.pos = _u_3.pos_3, _u_3.col_2) AS col_2 FROM tbl CROSS JOIN UNNEST(SEQUENCE(1, GREATEST(CARDINALITY(ARRAY[2, 3]), CARDINALITY(ARRAY[4, 5, 6])))) AS _u(pos) CROSS JOIN UNNEST(ARRAY[2, 3]) WITH ORDINALITY AS _u_2(col, pos_2) CROSS JOIN UNNEST(ARRAY[4, 5, 6]) WITH ORDINALITY AS _u_3(col_2, pos_3) WHERE (_u.pos = _u_2.pos_2 OR (_u.pos > CARDINALITY(ARRAY[2, 3]) AND _u_2.pos_2 = CARDINALITY(ARRAY[2, 3]))) AND (_u.pos = _u_3.pos_3 OR (_u.pos > CARDINALITY(ARRAY[4, 5, 6]) AND _u_3.pos_3 = CARDINALITY(ARRAY[4, 5, 6])))",
             },
         )
         self.validate_all(
             "SELECT col, pos, POSEXPLODE(ARRAY(2, 3)) FROM _u",
             write={
-                "presto": "SELECT col, pos, IF(_u_2.pos_2 = _u_3.pos_3, _u_3.col_2) AS col_2, IF(_u_2.pos_2 = _u_3.pos_3, _u_3.pos_3) AS pos_3 FROM _u CROSS JOIN UNNEST(SEQUENCE(1, GREATEST(CARDINALITY(ARRAY[2, 3])))) AS _u_2(pos_2) CROSS JOIN UNNEST(ARRAY[2, 3]) WITH ORDINALITY AS _u_3(col_2, pos_3) WHERE _u_2.pos_2 = _u_3.pos_3 OR (_u_2.pos_2 > CARDINALITY(ARRAY[2, 3]) AND _u_3.pos_3 = CARDINALITY(ARRAY[2, 3]))",
+                "presto": "SELECT col, pos, IF(_u_2.pos_2 = _u_3.pos_3, _u_3.col_2) AS col_2, IF(_u_2.pos_2 = _u_3.pos_3, _u_3.pos_3 - 1) AS pos_3 FROM _u CROSS JOIN UNNEST(SEQUENCE(1, GREATEST(CARDINALITY(ARRAY[2, 3])))) AS _u_2(pos_2) CROSS JOIN UNNEST(ARRAY[2, 3]) WITH ORDINALITY AS _u_3(col_2, pos_3) WHERE _u_2.pos_2 = _u_3.pos_3 OR (_u_2.pos_2 > CARDINALITY(ARRAY[2, 3]) AND _u_3.pos_3 = CARDINALITY(ARRAY[2, 3]))",
             },
         )
         self.validate_all(
@@ -1516,6 +1516,34 @@ TBLPROPERTIES (
                 "bigquery": "SELECT IF(pos = pos_2, a, NULL) AS a, (SELECT MAX(b) FROM (SELECT IF(pos = pos_2, b, NULL) AS b FROM UNNEST(GENERATE_ARRAY(0, GREATEST(ARRAY_LENGTH([1, 2])) - 1)) AS pos CROSS JOIN UNNEST([1, 2]) AS b WITH OFFSET AS pos_2 WHERE pos = pos_2 OR (pos > (ARRAY_LENGTH([1, 2]) - 1) AND pos_2 = (ARRAY_LENGTH([1, 2]) - 1)))) AS m FROM tbl CROSS JOIN UNNEST(GENERATE_ARRAY(0, GREATEST(ARRAY_LENGTH(x)) - 1)) AS pos CROSS JOIN UNNEST(x) AS a WITH OFFSET AS pos_2 WHERE pos = pos_2 OR (pos > (ARRAY_LENGTH(x) - 1) AND pos_2 = (ARRAY_LENGTH(x) - 1))",
                 "presto": "SELECT IF(_u.pos = _u_2.pos_2, _u_2.a) AS a, (SELECT MAX(b) FROM (SELECT IF(_u.pos = _u_2.pos_2, _u_2.b) AS b FROM UNNEST(SEQUENCE(1, GREATEST(CARDINALITY(ARRAY[1, 2])))) AS _u(pos) CROSS JOIN UNNEST(ARRAY[1, 2]) WITH ORDINALITY AS _u_2(b, pos_2) WHERE _u.pos = _u_2.pos_2 OR (_u.pos > CARDINALITY(ARRAY[1, 2]) AND _u_2.pos_2 = CARDINALITY(ARRAY[1, 2])))) AS m FROM tbl CROSS JOIN UNNEST(SEQUENCE(1, GREATEST(CARDINALITY(x)))) AS _u(pos) CROSS JOIN UNNEST(x) WITH ORDINALITY AS _u_2(a, pos_2) WHERE _u.pos = _u_2.pos_2 OR (_u.pos > CARDINALITY(x) AND _u_2.pos_2 = CARDINALITY(x))",
                 "spark": "SELECT EXPLODE(x) AS a, (SELECT MAX(b) FROM (SELECT EXPLODE(ARRAY(1, 2)) AS b)) AS m FROM tbl",
+            },
+        )
+
+    def test_explode_projection_to_unnest_with_joins(self):
+        # The unnest/series joins generated for the projection explode must be inserted right after
+        # the FROM clause instead of being appended after the query's existing joins. Otherwise the
+        # original join order (and therefore outer-join semantics and column resolution) is broken.
+        self.validate_all(
+            "SELECT a.id, EXPLODE(a.nums) AS n FROM a JOIN b ON a.id = b.id",
+            write={
+                "trino": "SELECT a.id, IF(_u.pos = _u_2.pos_2, _u_2.n) AS n FROM a CROSS JOIN UNNEST(SEQUENCE(1, GREATEST(CARDINALITY(a.nums)))) AS _u(pos) CROSS JOIN UNNEST(a.nums) WITH ORDINALITY AS _u_2(n, pos_2) JOIN b ON a.id = b.id WHERE _u.pos = _u_2.pos_2 OR (_u.pos > CARDINALITY(a.nums) AND _u_2.pos_2 = CARDINALITY(a.nums))",
+                "bigquery": "SELECT a.id, IF(pos = pos_2, n, NULL) AS n FROM a CROSS JOIN UNNEST(GENERATE_ARRAY(0, GREATEST(ARRAY_LENGTH(a.nums)) - 1)) AS pos CROSS JOIN UNNEST(a.nums) AS n WITH OFFSET AS pos_2 JOIN b ON a.id = b.id WHERE pos = pos_2 OR (pos > (ARRAY_LENGTH(a.nums) - 1) AND pos_2 = (ARRAY_LENGTH(a.nums) - 1))",
+            },
+        )
+        # EXPLODE_OUTER must keep the surrounding LEFT JOIN on the right side of the generated joins
+        self.validate_all(
+            "SELECT a.id, EXPLODE_OUTER(a.nums) AS n FROM a LEFT JOIN b ON a.id = b.id",
+            write={
+                "trino": "SELECT a.id, IF(_u.pos = _u_2.pos_2, _u_2.n) AS n FROM a CROSS JOIN UNNEST(SEQUENCE(1, GREATEST(CARDINALITY(IF(CARDINALITY(COALESCE(a.nums, ARRAY[])) = 0, ARRAY[ELEMENT_AT(a.nums, 0)], a.nums))))) AS _u(pos) CROSS JOIN UNNEST(IF(CARDINALITY(COALESCE(a.nums, ARRAY[])) = 0, ARRAY[ELEMENT_AT(a.nums, 0)], a.nums)) WITH ORDINALITY AS _u_2(n, pos_2) LEFT JOIN b ON a.id = b.id WHERE _u.pos = _u_2.pos_2 OR (_u.pos > CARDINALITY(IF(CARDINALITY(COALESCE(a.nums, ARRAY[])) = 0, ARRAY[ELEMENT_AT(a.nums, 0)], a.nums)) AND _u_2.pos_2 = CARDINALITY(IF(CARDINALITY(COALESCE(a.nums, ARRAY[])) = 0, ARRAY[ELEMENT_AT(a.nums, 0)], a.nums)))",
+                "bigquery": "SELECT a.id, IF(pos = pos_2, n, NULL) AS n FROM a CROSS JOIN UNNEST(GENERATE_ARRAY(0, GREATEST(ARRAY_LENGTH(IF(ARRAY_LENGTH(COALESCE(a.nums, [])) = 0, [a.nums[SAFE_ORDINAL(0)]], a.nums))) - 1)) AS pos CROSS JOIN UNNEST(IF(ARRAY_LENGTH(COALESCE(a.nums, [])) = 0, [a.nums[SAFE_ORDINAL(0)]], a.nums)) AS n WITH OFFSET AS pos_2 LEFT JOIN b ON a.id = b.id WHERE pos = pos_2 OR (pos > (ARRAY_LENGTH(IF(ARRAY_LENGTH(COALESCE(a.nums, [])) = 0, [a.nums[SAFE_ORDINAL(0)]], a.nums)) - 1) AND pos_2 = (ARRAY_LENGTH(IF(ARRAY_LENGTH(COALESCE(a.nums, [])) = 0, [a.nums[SAFE_ORDINAL(0)]], a.nums)) - 1))",
+            },
+        )
+        # POSEXPLODE's 0-based position must be compensated against the 1-based WITH ORDINALITY value
+        self.validate_all(
+            "SELECT id, POSEXPLODE(nums) AS (p, n) FROM a JOIN b ON a.id = b.id",
+            write={
+                "trino": "SELECT id, IF(_u.pos = _u_2.p, _u_2.n) AS n, IF(_u.pos = _u_2.p, _u_2.p - 1) AS p FROM a CROSS JOIN UNNEST(SEQUENCE(1, GREATEST(CARDINALITY(nums)))) AS _u(pos) CROSS JOIN UNNEST(nums) WITH ORDINALITY AS _u_2(n, p) JOIN b ON a.id = b.id WHERE _u.pos = _u_2.p OR (_u.pos > CARDINALITY(nums) AND _u_2.p = CARDINALITY(nums))",
+                "bigquery": "SELECT id, IF(pos = p, n, NULL) AS n, IF(pos = p, p, NULL) AS p FROM a CROSS JOIN UNNEST(GENERATE_ARRAY(0, GREATEST(ARRAY_LENGTH(nums)) - 1)) AS pos CROSS JOIN UNNEST(nums) AS n WITH OFFSET AS p JOIN b ON a.id = b.id WHERE pos = p OR (pos > (ARRAY_LENGTH(nums) - 1) AND p = (ARRAY_LENGTH(nums) - 1))",
             },
         )
 
